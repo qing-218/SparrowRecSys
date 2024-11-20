@@ -76,8 +76,9 @@ item_genre_emb_col = tf.feature_column.embedding_column(item_genre_col, 10)
 item_genre_ind_col = tf.feature_column.indicator_column(item_genre_col) # item genre indicator columns
 
 # fm first-order term columns: without embedding and concatenate to the output layer directly
+# FM模型中的一阶特征列：无需嵌入，直接与输出层连接
 fm_first_order_columns = [movie_ind_col, user_ind_col, user_genre_ind_col, item_genre_ind_col]
-
+# 深度学习部分的特征列：包括所有数值型特征和嵌入特征
 deep_feature_columns = [tf.feature_column.numeric_column('releaseYear'),
                         tf.feature_column.numeric_column('movieRatingCount'),
                         tf.feature_column.numeric_column('movieAvgRating'),
@@ -88,32 +89,37 @@ deep_feature_columns = [tf.feature_column.numeric_column('releaseYear'),
                         movie_emb_col,
                         user_emb_col]
 
+# 创建电影、用户、电影类别、用户类别的嵌入层
 item_emb_layer = tf.keras.layers.DenseFeatures([movie_emb_col])(inputs)
 user_emb_layer = tf.keras.layers.DenseFeatures([user_emb_col])(inputs)
 item_genre_emb_layer = tf.keras.layers.DenseFeatures([item_genre_emb_col])(inputs)
 user_genre_emb_layer = tf.keras.layers.DenseFeatures([user_genre_emb_col])(inputs)
 
-# The first-order term in the FM layer
+# FM模型中的一阶特征层
 fm_first_order_layer = tf.keras.layers.DenseFeatures(fm_first_order_columns)(inputs)
 
 # FM part, cross different categorical feature embeddings
+# FM部分，交叉不同的类别特征嵌入
 product_layer_item_user = tf.keras.layers.Dot(axes=1)([item_emb_layer, user_emb_layer])
 product_layer_item_genre_user_genre = tf.keras.layers.Dot(axes=1)([item_genre_emb_layer, user_genre_emb_layer])
 product_layer_item_genre_user = tf.keras.layers.Dot(axes=1)([item_genre_emb_layer, user_emb_layer])
 product_layer_user_genre_item = tf.keras.layers.Dot(axes=1)([item_emb_layer, user_genre_emb_layer])
 
 # deep part, MLP to generalize all input features
+# 深度学习部分，使用MLP来处理所有输入特征
 deep = tf.keras.layers.DenseFeatures(deep_feature_columns)(inputs)
 deep = tf.keras.layers.Dense(64, activation='relu')(deep)
 deep = tf.keras.layers.Dense(64, activation='relu')(deep)
 
 # concatenate fm part and deep part
+# 将FM部分和深度部分的结果进行拼接
 concat_layer = tf.keras.layers.concatenate([fm_first_order_layer, product_layer_item_user, product_layer_item_genre_user_genre,
                                             product_layer_item_genre_user, product_layer_user_genre_item, deep], axis=1)
 output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(concat_layer)
 
 model = tf.keras.Model(inputs, output_layer)
 # compile the model, set loss function, optimizer and evaluation metrics
+# 编译模型，设置损失函数、优化器和评估指标
 model.compile(
     loss='binary_crossentropy',
     optimizer='adam',
