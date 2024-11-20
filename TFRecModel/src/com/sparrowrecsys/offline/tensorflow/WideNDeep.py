@@ -69,7 +69,9 @@ numerical_columns = [tf.feature_column.numeric_column('releaseYear'),
                      tf.feature_column.numeric_column('userRatingStddev')]
 
 # cross feature between current movie and user historical movie
+# 计算当前电影与用户历史评分电影的交叉特征
 rated_movie = tf.feature_column.categorical_column_with_identity(key='userRatedMovie1', num_buckets=1001)
+# 使用crossed_column将当前电影和用户历史评分电影进行交叉，生成一个新特征
 crossed_feature = tf.feature_column.indicator_column(tf.feature_column.crossed_column([movie_col, rated_movie], 10000))
 
 # define input for keras model
@@ -98,13 +100,19 @@ inputs = {
 
 # wide and deep model architecture
 # deep part for all input features
+# Wide and Deep模型架构
+# 深度部分：处理所有输入特征
 deep = tf.keras.layers.DenseFeatures(numerical_columns + categorical_columns)(inputs)
 deep = tf.keras.layers.Dense(128, activation='relu')(deep)
 deep = tf.keras.layers.Dense(128, activation='relu')(deep)
 # wide part for cross feature
+# 宽部分：处理交叉特征
 wide = tf.keras.layers.DenseFeatures(crossed_feature)(inputs)
+# 将Deep部分和Wide部分的输出拼接在一起
 both = tf.keras.layers.concatenate([deep, wide])
+# 输出层：使用Sigmoid激活函数进行二分类
 output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(both)
+
 model = tf.keras.Model(inputs, output_layer)
 
 # compile the model, set loss function, optimizer and evaluation metrics
