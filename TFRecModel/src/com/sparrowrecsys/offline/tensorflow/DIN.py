@@ -11,14 +11,15 @@ test_samples_file_path = tf.keras.utils.get_file("testSamples.csv",
 
 
 # load sample as tf dataset
+# 加载数据集并转换为tf.data格式
 def get_dataset(file_path):
     dataset = tf.data.experimental.make_csv_dataset(
         file_path,
         batch_size=12,
         label_name='label',
-        na_value="0",
-        num_epochs=1,
-        ignore_errors=True)
+        na_value="0", # 如果遇到缺失值，用0填充
+        num_epochs=1, # 只读取一次数据
+        ignore_errors=True) # 忽略数据中的错误
     return dataset
 
 
@@ -67,14 +68,17 @@ user_col = tf.feature_column.categorical_column_with_identity(key='userId', num_
 user_emb_col = tf.feature_column.embedding_column(user_col, EMBEDDING_SIZE)
 
 # genre features vocabulary
+# 定义电影类别的词汇表
 genre_vocab = ['Film-Noir', 'Action', 'Adventure', 'Horror', 'Romance', 'War', 'Comedy', 'Western', 'Documentary',
                'Sci-Fi', 'Drama', 'Thriller',
                'Crime', 'Fantasy', 'Animation', 'IMAX', 'Mystery', 'Children', 'Musical']
 # user genre embedding feature
+# 用户偏好的类别嵌入
 user_genre_col = tf.feature_column.categorical_column_with_vocabulary_list(key="userGenre1",
                                                                            vocabulary_list=genre_vocab)
 user_genre_emb_col = tf.feature_column.embedding_column(user_genre_col, EMBEDDING_SIZE)
 # item genre embedding feature
+# 电影类别的嵌入
 item_genre_col = tf.feature_column.categorical_column_with_vocabulary_list(key="movieGenre1",
                                                                            vocabulary_list=genre_vocab)
 item_genre_emb_col = tf.feature_column.embedding_column(item_genre_col, EMBEDDING_SIZE)
@@ -91,9 +95,9 @@ recent_rate_col = [
 ]
 '''
 
-
+# 定义候选电影的嵌入
 candidate_movie_col = [ tf.feature_column.numeric_column(key='movieId', default_value=0),   ]
-
+# 用户最近评分的电影特征
 recent_rate_col = [
     tf.feature_column.numeric_column(key='userRatedMovie1', default_value=0),
     tf.feature_column.numeric_column(key='userRatedMovie2', default_value=0),
@@ -105,6 +109,7 @@ recent_rate_col = [
 
 
 # user profile
+# 用户信息特征
 user_profile = [
     user_emb_col,
     user_genre_emb_col,
@@ -121,7 +126,7 @@ context_features = [
     tf.feature_column.numeric_column('movieAvgRating'),
     tf.feature_column.numeric_column('movieRatingStddev'),
 ]
-
+# 将特征列转换为Keras输入层
 candidate_layer = tf.keras.layers.DenseFeatures(candidate_movie_col)(inputs)
 user_behaviors_layer = tf.keras.layers.DenseFeatures(recent_rate_col)(inputs)
 user_profile_layer = tf.keras.layers.DenseFeatures(user_profile)(inputs)
@@ -130,22 +135,22 @@ context_features_layer = tf.keras.layers.DenseFeatures(context_features)(inputs)
 # Activation Unit
 
 movie_emb_layer = tf.keras.layers.Embedding(input_dim=1001,output_dim=EMBEDDING_SIZE,mask_zero=True)# mask zero
-
+# 对用户最近评分的电影进行嵌入
 user_behaviors_emb_layer = movie_emb_layer(user_behaviors_layer) 
-
+# 对候选电影进行嵌入
 candidate_emb_layer = movie_emb_layer(candidate_layer) 
 candidate_emb_layer = tf.squeeze(candidate_emb_layer,axis=1)
-
+# 重复候选电影嵌入，以便与用户评分行为对齐
 repeated_candidate_emb_layer = tf.keras.layers.RepeatVector(RECENT_MOVIES)(candidate_emb_layer)
-
+# 激活单元：用户评分行为和候选电影嵌入的差值与乘积
 activation_sub_layer = tf.keras.layers.Subtract()([user_behaviors_emb_layer,
                                                    repeated_candidate_emb_layer])  # element-wise sub
 activation_product_layer = tf.keras.layers.Multiply()([user_behaviors_emb_layer,
                                                        repeated_candidate_emb_layer])  # element-wise product
-
+# 拼接激活层
 activation_all = tf.keras.layers.concatenate([activation_sub_layer, user_behaviors_emb_layer,
                                               repeated_candidate_emb_layer, activation_product_layer], axis=-1)
-
+# 使用全连接层进行处理
 activation_unit = tf.keras.layers.Dense(32)(activation_all)
 activation_unit = tf.keras.layers.PReLU()(activation_unit)
 activation_unit = tf.keras.layers.Dense(1, activation='sigmoid')(activation_unit)
@@ -168,6 +173,7 @@ output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(output_layer)
 
 model = tf.keras.Model(inputs, output_layer)
 # compile the model, set loss function, optimizer and evaluation metrics
+# 编译模型，设置损失函数、优化器和评价指标
 model.compile(
     loss='binary_crossentropy',
     optimizer='adam',
