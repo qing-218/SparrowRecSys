@@ -14,8 +14,8 @@ import java.util.*;
 import static com.sparrowrecsys.online.util.HttpClient.asyncSinglePostRequest;
 
 /**
- * Recommendation process of similar movies
- */
+ * 推荐相似电影的推荐流程
+ *
 
 public class RecForYouProcess {
 
