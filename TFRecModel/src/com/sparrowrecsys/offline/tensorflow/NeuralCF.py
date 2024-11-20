@@ -42,35 +42,44 @@ inputs = {
 
 
 # neural cf model arch two. only embedding in each tower, then MLP as the interaction layers
+# 神经协同过滤模型架构一：每个塔（item_tower 和 user_tower）只包含嵌入层，交互层使用MLP
 def neural_cf_model_1(feature_inputs, item_feature_columns, user_feature_columns, hidden_units):
+  # item塔：将电影特征通过嵌入层转化为特征
     item_tower = tf.keras.layers.DenseFeatures(item_feature_columns)(feature_inputs)
+  # user塔：将用户特征通过嵌入层转化为特征
     user_tower = tf.keras.layers.DenseFeatures(user_feature_columns)(feature_inputs)
+  # 合并item塔和user塔的特征作为交互层
     interact_layer = tf.keras.layers.concatenate([item_tower, user_tower])
+  # 交互层使用MLP结构，逐层进行特征转换
     for num_nodes in hidden_units:
         interact_layer = tf.keras.layers.Dense(num_nodes, activation='relu')(interact_layer)
+  # 输出层，使用Sigmoid激活函数进行二分类
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(interact_layer)
     neural_cf_model = tf.keras.Model(feature_inputs, output_layer)
     return neural_cf_model
 
-
+# 神经协同过滤模型架构二：每个塔（item_tower 和 user_tower）包含嵌入层和MLP，输出层为点积层
 # neural cf model arch one. embedding+MLP in each tower, then dot product layer as the output
 def neural_cf_model_2(feature_inputs, item_feature_columns, user_feature_columns, hidden_units):
+  # item塔：将电影特征通过嵌入层转化为特征，并通过MLP进行转换
     item_tower = tf.keras.layers.DenseFeatures(item_feature_columns)(feature_inputs)
     for num_nodes in hidden_units:
         item_tower = tf.keras.layers.Dense(num_nodes, activation='relu')(item_tower)
-
+# user塔：将用户特征通过嵌入层转化为特征，并通过MLP进行转换
     user_tower = tf.keras.layers.DenseFeatures(user_feature_columns)(feature_inputs)
     for num_nodes in hidden_units:
         user_tower = tf.keras.layers.Dense(num_nodes, activation='relu')(user_tower)
-
+# 使用点积（Dot）计算item塔和user塔的交互
     output = tf.keras.layers.Dot(axes=1)([item_tower, user_tower])
+   # 输出层，使用Sigmoid激活函数进行二分类
     output = tf.keras.layers.Dense(1, activation='sigmoid')(output)
-
+ 
     neural_cf_model = tf.keras.Model(feature_inputs, output)
     return neural_cf_model
 
 
 # neural cf model architecture
+# 使用模型架构一进行实例化，输入包括电影和用户的嵌入特征，以及隐藏层单元数量
 model = neural_cf_model_1(inputs, [movie_emb_col], [user_emb_col], [10, 10])
 
 # compile the model, set loss function, optimizer and evaluation metrics
