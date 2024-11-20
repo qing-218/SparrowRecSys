@@ -45,10 +45,14 @@ GENRE_FEATURES = {
 # all categorical features
 categorical_columns = []
 for feature, vocab in GENRE_FEATURES.items():
+  # 创建一个基于词汇表的分类特征
     cat_col = tf.feature_column.categorical_column_with_vocabulary_list(
         key=feature, vocabulary_list=vocab)
+  # 将分类特征转换为嵌入特征，维度为10
     emb_col = tf.feature_column.embedding_column(cat_col, 10)
-    categorical_columns.append(emb_col)
+    categorical_columns.append(emb_col)# 将嵌入特征添加到分类特征列表中
+  
+# 电影ID嵌入特征
 # movie id embedding feature
 movie_col = tf.feature_column.categorical_column_with_identity(key='movieId', num_buckets=1001)
 movie_emb_col = tf.feature_column.embedding_column(movie_col, 10)
@@ -60,6 +64,7 @@ user_emb_col = tf.feature_column.embedding_column(user_col, 10)
 categorical_columns.append(user_emb_col)
 
 # all numerical features
+# 所有数值特征
 numerical_columns = [tf.feature_column.numeric_column('releaseYear'),
                      tf.feature_column.numeric_column('movieRatingCount'),
                      tf.feature_column.numeric_column('movieAvgRating'),
@@ -69,7 +74,9 @@ numerical_columns = [tf.feature_column.numeric_column('releaseYear'),
                      tf.feature_column.numeric_column('userRatingStddev')]
 
 # embedding + MLP model architecture
+# 嵌入特征 + MLP模型架构
 model = tf.keras.Sequential([
+  # 使用DenseFeatures层将数值特征和分类特征结合起来
     tf.keras.layers.DenseFeatures(numerical_columns + categorical_columns),
     tf.keras.layers.Dense(128, activation='relu'),
     tf.keras.layers.Dense(128, activation='relu'),
