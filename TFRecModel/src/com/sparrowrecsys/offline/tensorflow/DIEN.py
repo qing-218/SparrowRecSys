@@ -27,29 +27,33 @@ test_samples_file_path = tf.keras.utils.get_file("testSamples.csv",
 
 
 
+# 获取带有负样本的训练集
 def get_dataset_with_negtive_movie(path,batch_size,seed_num):
     tmp_df = pd.read_csv(path)
-    tmp_df.fillna(0,inplace=True)
-    random.seed(seed_num)
+    tmp_df.fillna(0,inplace=True) # 填充缺失值
+    random.seed(seed_num) # 设置随机种子
+     # 生成负样本，随机选择未评分的电影作为负样本
     negtive_movie_df=tmp_df.loc[:,'userRatedMovie2':'userRatedMovie5'].applymap( lambda x: random.sample( set(range(0, 1001))-set([int(x)]), 1)[0]  )
     negtive_movie_df.columns = ['negtive_userRatedMovie2','negtive_userRatedMovie3','negtive_userRatedMovie4','negtive_userRatedMovie5']
     tmp_df=pd.concat([tmp_df,negtive_movie_df],axis=1)
-
+    # 转换所有对象类型列为字符串类型
     for i in tmp_df.select_dtypes('O').columns:
         tmp_df[i] = tmp_df[i].astype('str')
-    
+    # 按照批次大小打乱数据集
     if tf.__version__<'2.3.0':
         tmp_df = tmp_df.sample(  n= batch_size*( len(tmp_df)//batch_size   )   ,random_state=seed_num ) 
     
-    
+    # 将数据转换为TensorFlow数据集格式
     dataset = tf.data.Dataset.from_tensor_slices( (  dict(tmp_df)) )
     dataset = dataset.batch(batch_size)
     return dataset
-
+    
+# 获取训练集和测试集
 train_dataset = get_dataset_with_negtive_movie(training_samples_file_path,12,seed_num=2020)
 test_dataset = get_dataset_with_negtive_movie(test_samples_file_path,12,seed_num=2021)
 
 # Config
+# 配置超参数
 RECENT_MOVIES = 5  # userRatedMovie{1-5}
 EMBEDDING_SIZE = 10
 
@@ -89,19 +93,23 @@ inputs = {
 }
 
 
-# user id embedding feature
+# user id embedding feature 
+# 用户ID嵌入
 user_col = tf.feature_column.categorical_column_with_identity(key='userId', num_buckets=30001)
 user_emb_col = tf.feature_column.embedding_column(user_col, EMBEDDING_SIZE)
 
-# genre features vocabulary
+# genre features vocabulary 
+# 用户和电影的类别特征（电影类型）
 genre_vocab = ['Film-Noir', 'Action', 'Adventure', 'Horror', 'Romance', 'War', 'Comedy', 'Western', 'Documentary',
                'Sci-Fi', 'Drama', 'Thriller',
                'Crime', 'Fantasy', 'Animation', 'IMAX', 'Mystery', 'Children', 'Musical']
 # user genre embedding feature
+# 用户的电影类型嵌入
 user_genre_col = tf.feature_column.categorical_column_with_vocabulary_list(key="userGenre1",
                                                                            vocabulary_list=genre_vocab)
 user_genre_emb_col = tf.feature_column.embedding_column(user_genre_col, EMBEDDING_SIZE)
 # item genre embedding feature
+# 电影的类型嵌入
 item_genre_col = tf.feature_column.categorical_column_with_vocabulary_list(key="movieGenre1",
                                                                            vocabulary_list=genre_vocab)
 item_genre_emb_col = tf.feature_column.embedding_column(item_genre_col, EMBEDDING_SIZE)
@@ -111,6 +119,7 @@ item_genre_emb_col = tf.feature_column.embedding_column(item_genre_col, EMBEDDIN
 candidate_movie_col = [ tf.feature_column.numeric_column(key='movieId', default_value=0),   ]
 
 # user behaviors
+# 用户行为特征（最近5个评分的电影）
 recent_rate_col = [
     tf.feature_column.numeric_column(key='userRatedMovie1', default_value=0),
     tf.feature_column.numeric_column(key='userRatedMovie2', default_value=0),
@@ -119,7 +128,7 @@ recent_rate_col = [
     tf.feature_column.numeric_column(key='userRatedMovie5', default_value=0),
 ]
 
-
+# 负样本特征（随机选取未评分的电影）
 negtive_movie_col = [
     tf.feature_column.numeric_column(key='negtive_userRatedMovie2', default_value=0),
     tf.feature_column.numeric_column(key='negtive_userRatedMovie3', default_value=0),
@@ -130,6 +139,7 @@ negtive_movie_col = [
 
 
 # user profile
+# 用户信息（如评分数、平均评分等）
 user_profile = [
     user_emb_col,
     user_genre_emb_col,
@@ -139,6 +149,7 @@ user_profile = [
 ]
 
 # context features
+# 电影信息（如评分数、平均评分等）
 context_features = [
     item_genre_emb_col,
     tf.feature_column.numeric_column('releaseYear'),
@@ -149,7 +160,7 @@ context_features = [
 
 label =[ tf.feature_column.numeric_column(key='label', default_value=0),   ]
 
-
+# 定义候选电影层（即模型需要预测的电影
 candidate_layer = tf.keras.layers.DenseFeatures(candidate_movie_col)(inputs)
 user_behaviors_layer = tf.keras.layers.DenseFeatures(recent_rate_col)(inputs)
 negtive_movie_layer = tf.keras.layers.DenseFeatures(negtive_movie_col)(inputs)
@@ -158,35 +169,37 @@ context_features_layer = tf.keras.layers.DenseFeatures(context_features)(inputs)
 y_true = tf.keras.layers.DenseFeatures(label)(inputs)
 
 # Activation Unit
+# 定义电影的嵌入层，输入维度为1001，输出维度为EMBEDDING_SIZE，mask_zero=True表示0会被mask掉
 movie_emb_layer = tf.keras.layers.Embedding(input_dim=1001,output_dim=EMBEDDING_SIZE,mask_zero=True)# mask zero
-
+# 为用户行为、候选电影和负样本电影创建嵌入层
 user_behaviors_emb_layer = movie_emb_layer(user_behaviors_layer) 
 candidate_emb_layer = movie_emb_layer(candidate_layer) 
 negtive_movie_emb_layer = movie_emb_layer(negtive_movie_layer) 
-
+# 压缩候选电影的嵌入层维度，去掉多余的轴
 candidate_emb_layer = tf.squeeze(candidate_emb_layer,axis=1)
-
+# 使用GRU对用户行为嵌入层进行处理
 user_behaviors_hidden_state=tf.keras.layers.GRU(EMBEDDING_SIZE, return_sequences=True)(user_behaviors_emb_layer)
 
+# 定义注意力机制类
 class attention(tf.keras.layers.Layer):
     def __init__(self, embedding_size=EMBEDDING_SIZE, time_length=5, ):
         super().__init__()
         self.time_length = time_length  
         self.embedding_size = embedding_size
-        self.RepeatVector_time = tf.keras.layers.RepeatVector(self.time_length)
-        self.RepeatVector_emb = tf.keras.layers.RepeatVector(self.embedding_size)        
+        self.RepeatVector_time = tf.keras.layers.RepeatVector(self.time_length)   # 时间维度重复
+        self.RepeatVector_emb = tf.keras.layers.RepeatVector(self.embedding_size)         # 嵌入维度重复
         self.Multiply  =   tf.keras.layers.Multiply()
-        self.Dense32   =   tf.keras.layers.Dense(32,activation='sigmoid')
-        self.Dense1    =   tf.keras.layers.Dense(1,activation='sigmoid')        
+        self.Dense32   =   tf.keras.layers.Dense(32,activation='sigmoid') # 激活函数为sigmoid的全连接层
+        self.Dense1    =   tf.keras.layers.Dense(1,activation='sigmoid')         # 激活函数为sigmoid的全连接层
         self.Flatten   =   tf.keras.layers.Flatten()    
-        self.Permute   =   tf.keras.layers.Permute((2, 1))
+        self.Permute   =   tf.keras.layers.Permute((2, 1)) # 调换维度顺序
         
     def build(self, input_shape):
         pass
     
     def call(self, inputs):
         candidate_inputs,gru_hidden_state=inputs
-        repeated_candidate_layer = self.RepeatVector_time(candidate_inputs)
+        repeated_candidate_layer = self.RepeatVector_time(candidate_inputs) # 重复候选电影层
         activation_product_layer = self.Multiply([gru_hidden_state,repeated_candidate_layer]) 
         activation_unit = self.Dense32(activation_product_layer)
         activation_unit = self.Dense1(activation_unit)  
@@ -195,18 +208,19 @@ class attention(tf.keras.layers.Layer):
         Repeat_attention_s=self.Permute(Repeat_attention_s)
 
         return Repeat_attention_s
-
+        
+# 计算注意力得分
 attention_score=attention()( [candidate_emb_layer, user_behaviors_hidden_state])
 
 
-
+# 定义GRU门参数层
 class GRU_gate_parameter(tf.keras.layers.Layer):
     def __init__(self,embedding_size=EMBEDDING_SIZE):
         super().__init__()
         self.embedding_size = embedding_size        
         self.Multiply =   tf.keras.layers.Multiply()
-        self.Dense_sigmoid = tf.keras.layers.Dense( self.embedding_size,activation='sigmoid'   )
-        self.Dense_tanh =tf.keras.layers.Dense( self.embedding_size,activation='tanh'    )
+        self.Dense_sigmoid = tf.keras.layers.Dense( self.embedding_size,activation='sigmoid'   )# sigmoid激活的全连接层
+        self.Dense_tanh =tf.keras.layers.Dense( self.embedding_size,activation='tanh'    )# tanh激活的全连接层
         
     def build(self, input_shape):
         self.input_w =   tf.keras.layers.Dense(self.embedding_size,activation=None,use_bias=True)   
@@ -215,11 +229,11 @@ class GRU_gate_parameter(tf.keras.layers.Layer):
     def call(self, inputs,Z_t_inputs=None ):
         gru_inputs,hidden_inputs = inputs
         if Z_t_inputs==None:
-            return  self.Dense_sigmoid(  self.input_w(gru_inputs) + self.hidden_w(hidden_inputs) )
+            return  self.Dense_sigmoid(  self.input_w(gru_inputs) + self.hidden_w(hidden_inputs) )# 计算sigmoid门
         else:           
-            return self.Dense_tanh(  self.input_w(gru_inputs) + self.hidden_w(self.Multiply([hidden_inputs,Z_t_inputs]) ))
+            return self.Dense_tanh(  self.input_w(gru_inputs) + self.hidden_w(self.Multiply([hidden_inputs,Z_t_inputs]) ))# 计算tanh门
 
-                                                                                                                                                                
+ # 定义AUGRU层                                                                                                                                                               
 class AUGRU(tf.keras.layers.Layer):
     def __init__(self,embedding_size=EMBEDDING_SIZE,  time_length=5):
         super().__init__()
@@ -229,26 +243,26 @@ class AUGRU(tf.keras.layers.Layer):
         self.Add=tf.keras.layers.Add()                                                                                
     
     def build(self, input_shape):
-        self.R_t = GRU_gate_parameter()
-        self.Z_t = GRU_gate_parameter()                                                                                     
-        self.H_t_next = GRU_gate_parameter()     
+        self.R_t = GRU_gate_parameter()# R门
+        self.Z_t = GRU_gate_parameter() # Z门                                                                                    
+        self.H_t_next = GRU_gate_parameter()     # H门
 
     def call(self, inputs ):
         gru_hidden_state_inputs,attention_s=inputs
         initializer = tf.keras.initializers.GlorotUniform()
-        AUGRU_hidden_state = tf.reshape(initializer(shape=(1,self.embedding_size )),shape=(-1,self.embedding_size ))
+        AUGRU_hidden_state = tf.reshape(initializer(shape=(1,self.embedding_size )),shape=(-1,self.embedding_size )) # 初始化隐藏状态
         for t in range(self.time_length):            
             r_t=   self.R_t(   [gru_hidden_state_inputs[:,t,:],  AUGRU_hidden_state]    )
             z_t=   self.Z_t(   [gru_hidden_state_inputs[:,t,:],  AUGRU_hidden_state]    )
             h_t_next=   self.H_t_next(   [gru_hidden_state_inputs[:,t,:],  AUGRU_hidden_state] , z_t  )
-            Rt_attention =self.Multiply([attention_s[:,t,:] , r_t])
+            Rt_attention =self.Multiply([attention_s[:,t,:] , r_t]) # 计算注意力加权
             
             AUGRU_hidden_state = self.Add( [self.Multiply([(1-Rt_attention),AUGRU_hidden_state  ] ), self.Multiply([Rt_attention ,h_t_next ] )])
 
         return AUGRU_hidden_state
 
 augru_emb=AUGRU()(  [ user_behaviors_hidden_state   ,attention_score  ]  )
-
+# 将AUGRU输出和其他层的输出进行连接
 concat_layer = tf.keras.layers.concatenate([ augru_emb,  candidate_emb_layer,user_profile_layer,context_features_layer])
 
 output_layer = tf.keras.layers.Dense(128)(concat_layer)
@@ -257,7 +271,7 @@ output_layer = tf.keras.layers.Dense(64)(output_layer)
 output_layer = tf.keras.layers.PReLU()(output_layer)
 y_pred = tf.keras.layers.Dense(1, activation='sigmoid')(output_layer)
 
-
+# 定义辅助损失层
 class auxiliary_loss_layer(tf.keras.layers.Layer):
     def __init__(self,time_length=5 ):
         super().__init__()
@@ -276,7 +290,7 @@ class auxiliary_loss_layer(tf.keras.layers.Layer):
         negtive_movie_t1,postive_movie_t0,movie_hidden_state,y_true,y_pred=inputs
         #auxiliary_loss_values = [] 
         positive_concat_layer=tf.keras.layers.concatenate([  movie_hidden_state[:,0:4,:],  postive_movie_t0[:,1:5,:]  ])
-        positive_concat_layer=self.Dense_sigmoid_positive32(   positive_concat_layer     )
+        positive_concat_layer=self.Dense_sigmoid_positive32(   positive_concat_layer     ) # 正样本通过全连接层
         positive_loss = self.Dense_sigmoid_positive1(positive_concat_layer)
         
         negtive_concat_layer=tf.keras.layers.concatenate([  movie_hidden_state[:,0:4,:],  negtive_movie_t1[:,:,:]  ])
@@ -285,14 +299,14 @@ class auxiliary_loss_layer(tf.keras.layers.Layer):
         auxiliary_loss_values = positive_loss + negtive_loss
         
         final_loss = tf.keras.losses.binary_crossentropy( y_true, y_pred )-alpha* tf.reduce_mean(  tf.reduce_sum(    auxiliary_loss_values,axis=1 ))
-        self.add_loss(final_loss, inputs=True)
+        self.add_loss(final_loss, inputs=True) # 添加损失
         self.auc.update_state(y_true, y_pred )
         self.add_metric(self.auc.result(), aggregation="mean", name="auc_value")        
         
         return  final_loss
-
+# 使用辅助损失层进行计算
 auxiliary_loss_value=auxiliary_loss_layer()(  [ negtive_movie_emb_layer,user_behaviors_emb_layer,user_behaviors_hidden_state,y_true,y_pred]  )
-
+# 构建包含辅助损失的模型
 model = tf.keras.Model(inputs=inputs, outputs=[y_pred,auxiliary_loss_value])
 
 model.compile(optimizer="adam")
