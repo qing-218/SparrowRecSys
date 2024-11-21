@@ -5,17 +5,20 @@ import com.sparrowrecsys.online.datamanager.Movie;
 import java.util.*;
 
 /**
- * Recommendation process of similar movies
+ * 推荐相似电影的处理流程
  */
-
 public class SimilarMovieProcess {
 
     /**
-     * get recommendation movie list
-     * @param movieId input movie id
-     * @param size  size of similar items
-     * @param model model used for calculating similarity
-     * @return  list of similar movies
+     * 获取推荐电影列表
+     * <p>
+     * 根据输入的电影ID、推荐列表的大小和用于计算相似度的模型，返回一个相似电影的列表。
+     * </p>
+     *
+     * @param movieId 输入的电影 ID
+     * @param size    相似项的大小
+     * @param model   用于计算相似度的模型
+     * @return 相似电影的列表
      */
     public static List<Movie> getRecList(int movieId, int size, String model){
         Movie movie = DataManager.getInstance().getMovieById(movieId);
@@ -32,9 +35,14 @@ public class SimilarMovieProcess {
     }
 
     /**
-     * generate candidates for similar movies recommendation
-     * @param movie input movie object
-     * @return  movie candidates
+     * 生成相似电影推荐的候选集
+     * <p>
+     * 根据输入的电影对象，生成相似电影推荐的候选集。对于电影的每个类型，获取该类型的电影作为候选，
+     * 最后从候选集中移除输入的电影本身。
+     * </p>
+     *
+     * @param movie 输入的电影对象
+     * @return 电影候选集
      */
     public static List<Movie> candidateGenerator(Movie movie){
         HashMap<Integer, Movie> candidateMap = new HashMap<>();
@@ -49,9 +57,13 @@ public class SimilarMovieProcess {
     }
 
     /**
-     * multiple-retrieval candidate generation method
-     * @param movie input movie object
-     * @return movie candidates
+     * 多检索候选生成方法
+     * <p>
+     * 根据输入的电影对象，从不同的数据源（类型、评分、最新）生成候选集。
+     * </p>
+     *
+     * @param movie 输入的电影对象
+     * @return 电影候选集
      */
     public static List<Movie> multipleRetrievalCandidates(Movie movie){
         if (null == movie){
@@ -83,10 +95,15 @@ public class SimilarMovieProcess {
     }
 
     /**
-     * embedding based candidate generation method
-     * @param movie input movie
-     * @param size  size of candidate pool
-     * @return  movie candidates
+     * 基于嵌入向量的候选生成方法
+     * <p>
+     * 根据输入的电影对象和候选池的大小，基于嵌入向量生成候选集。
+     * 计算输入电影与所有电影的相似度，然后选择相似度最高的电影作为候选集。
+     * </p>
+     *
+     * @param movie 输入的电影
+     * @param size  候选池的大小
+     * @return 电影候选集
      */
     public static List<Movie> retrievalCandidatesByEmbedding(Movie movie, int size){
         if (null == movie || null == movie.getEmb()){
@@ -112,11 +129,16 @@ public class SimilarMovieProcess {
     }
 
     /**
-     * rank candidates
-     * @param movie    input movie
-     * @param candidates    movie candidates
-     * @param model     model name used for ranking
-     * @return  ranked movie list
+     * 对候选集进行排序
+     * <p>
+     * 根据输入的电影对象、候选集和用于排序的模型，对候选集进行排序。
+     * 计算输入电影与每个候选电影的相似度，然后根据相似度对候选集进行排序。
+     * </p>
+     *
+     * @param movie    输入的电影
+     * @param candidates    电影候选集
+     * @param model    用于排序的模型名称
+     * @return 排序后的电影列表
      */
     public static List<Movie> ranker(Movie movie, List<Movie> candidates, String model){
         HashMap<Movie, Double> candidateScoreMap = new HashMap<>();
@@ -137,10 +159,15 @@ public class SimilarMovieProcess {
     }
 
     /**
-     * function to calculate similarity score
-     * @param movie     input movie
-     * @param candidate candidate movie
-     * @return  similarity score
+     * 计算相似度得分
+     * <p>
+     * 根据输入的电影对象和候选电影对象，计算它们之间的相似度得分。
+     * 相似度得分基于它们共有的类型数量和候选电影的评分。
+     * </p>
+     *
+     * @param movie     输入的电影
+     * @param candidate 候选电影
+     * @return 相似度得分
      */
     public static double calculateSimilarScore(Movie movie, Movie candidate){
         int sameGenreCount = 0;
@@ -159,10 +186,15 @@ public class SimilarMovieProcess {
     }
 
     /**
-     * function to calculate similarity score based on embedding
-     * @param movie     input movie
-     * @param candidate candidate movie
-     * @return  similarity score
+     * 基于嵌入向量计算相似度得分
+     * <p>
+     * 根据输入的电影对象和候选电影对象，基于它们的嵌入向量计算相似度得分。
+     * 如果输入的电影或候选电影为空，返回 -1 表示无效的相似度得分。
+     * </p>
+     *
+     * @param movie     输入的电影
+     * @param candidate 候选电影
+     * @return 相似度得分
      */
     public static double calculateEmbSimilarScore(Movie movie, Movie candidate){
         if (null == movie || null == candidate){
