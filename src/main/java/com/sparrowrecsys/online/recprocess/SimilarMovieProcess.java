@@ -25,9 +25,10 @@ public class SimilarMovieProcess {
         if (null == movie){
             return new ArrayList<>();
         }
-        List<Movie> candidates = candidateGenerator(movie);
-        List<Movie> rankedList = ranker(movie, candidates, model);
+        List<Movie> candidates = candidateGenerator(movie);// 生成候选电影
+        List<Movie> rankedList = ranker(movie, candidates, model);// 对候选电影进行排序
 
+        // 如果推荐的电影数量超过了设定的大小，截取前size个电影
         if (rankedList.size() > size){
             return rankedList.subList(0, size);
         }
@@ -46,14 +47,15 @@ public class SimilarMovieProcess {
      */
     public static List<Movie> candidateGenerator(Movie movie){
         HashMap<Integer, Movie> candidateMap = new HashMap<>();
+        // 根据输入电影的类型生成候选集
         for (String genre : movie.getGenres()){
             List<Movie> oneCandidates = DataManager.getInstance().getMoviesByGenre(genre, 100, "rating");
             for (Movie candidate : oneCandidates){
-                candidateMap.put(candidate.getMovieId(), candidate);
+                candidateMap.put(candidate.getMovieId(), candidate);// 将候选电影添加到候选集合中
             }
         }
-        candidateMap.remove(movie.getMovieId());
-        return new ArrayList<>(candidateMap.values());
+        candidateMap.remove(movie.getMovieId());// 移除输入电影本身
+        return new ArrayList<>(candidateMap.values());// 返回候选电影列表
     }
 
     /**
@@ -70,27 +72,30 @@ public class SimilarMovieProcess {
             return null;
         }
 
-        HashSet<String> genres = new HashSet<>(movie.getGenres());
+        HashSet<String> genres = new HashSet<>(movie.getGenres()); // 获取电影的所有类型
 
         HashMap<Integer, Movie> candidateMap = new HashMap<>();
+        // 从每个类型的电影中获取候选电影
         for (String genre : genres){
             List<Movie> oneCandidates = DataManager.getInstance().getMoviesByGenre(genre, 20, "rating");
             for (Movie candidate : oneCandidates){
-                candidateMap.put(candidate.getMovieId(), candidate);
+                candidateMap.put(candidate.getMovieId(), candidate);//将候选电影添加到候选集合中
             }
         }
 
+        // 从高评分电影中获取更多候选
         List<Movie> highRatingCandidates = DataManager.getInstance().getMovies(100, "rating");
         for (Movie candidate : highRatingCandidates){
-            candidateMap.put(candidate.getMovieId(), candidate);
+            candidateMap.put(candidate.getMovieId(), candidate);// 将高评分电影添加到候选集合中
         }
 
+        // 从最新上映电影中获取更多候选
         List<Movie> latestCandidates = DataManager.getInstance().getMovies(100, "releaseYear");
         for (Movie candidate : latestCandidates){
-            candidateMap.put(candidate.getMovieId(), candidate);
+            candidateMap.put(candidate.getMovieId(), candidate);// 将最新上映电影添加到候选集合中
         }
 
-        candidateMap.remove(movie.getMovieId());
+        candidateMap.remove(movie.getMovieId());// 移除输入电影本身
         return new ArrayList<>(candidateMap.values());
     }
 
@@ -112,20 +117,21 @@ public class SimilarMovieProcess {
 
         List<Movie> allCandidates = DataManager.getInstance().getMovies(10000, "rating");
         HashMap<Movie,Double> movieScoreMap = new HashMap<>();
+        // 计算每个候选电影与输入电影的嵌入向量相似度
         for (Movie candidate : allCandidates){
             double similarity = calculateEmbSimilarScore(movie, candidate);
             movieScoreMap.put(candidate, similarity);
         }
 
         List<Map.Entry<Movie,Double>> movieScoreList = new ArrayList<>(movieScoreMap.entrySet());
-        movieScoreList.sort(Map.Entry.comparingByValue());
+        movieScoreList.sort(Map.Entry.comparingByValue());// 按相似度排序
 
         List<Movie> candidates = new ArrayList<>();
         for (Map.Entry<Movie,Double> movieScoreEntry : movieScoreList){
-            candidates.add(movieScoreEntry.getKey());
+            candidates.add(movieScoreEntry.getKey());// 获取排序后的候选电影列表
         }
 
-        return candidates.subList(0, Math.min(candidates.size(), size));
+        return candidates.subList(0, Math.min(candidates.size(), size));// 返回前size个候选电影
     }
 
     /**
@@ -142,6 +148,7 @@ public class SimilarMovieProcess {
      */
     public static List<Movie> ranker(Movie movie, List<Movie> candidates, String model){
         HashMap<Movie, Double> candidateScoreMap = new HashMap<>();
+        // 根据模型计算每个候选电影的相似度得分
         for (Movie candidate : candidates){
             double similarity;
             switch (model){
@@ -153,6 +160,8 @@ public class SimilarMovieProcess {
             }
             candidateScoreMap.put(candidate, similarity);
         }
+
+        // 按照相似度得分对候选电影进行排序
         List<Movie> rankedList = new ArrayList<>();
         candidateScoreMap.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())).forEach(m -> rankedList.add(m.getKey()));
         return rankedList;
@@ -171,17 +180,20 @@ public class SimilarMovieProcess {
      */
     public static double calculateSimilarScore(Movie movie, Movie candidate){
         int sameGenreCount = 0;
+         // 计算两部电影的相同类型数量
         for (String genre : movie.getGenres()){
             if (candidate.getGenres().contains(genre)){
                 sameGenreCount++;
             }
         }
+         // 基于类型相似度和评分得分计算总相似度
         double genreSimilarity = (double)sameGenreCount / (movie.getGenres().size() + candidate.getGenres().size()) / 2;
         double ratingScore = candidate.getAverageRating() / 5;
 
         double similarityWeight = 0.7;
         double ratingScoreWeight = 0.3;
 
+        // 返回最终的相似度得分
         return genreSimilarity * similarityWeight + ratingScore * ratingScoreWeight;
     }
 
@@ -200,6 +212,7 @@ public class SimilarMovieProcess {
         if (null == movie || null == candidate){
             return -1;
         }
+        // 使用电影的嵌入向量计算与候选电影的相似度
         return movie.getEmb().calculateSimilarity(candidate.getEmb());
     }
 }
