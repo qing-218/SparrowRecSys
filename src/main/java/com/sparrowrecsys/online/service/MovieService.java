@@ -44,17 +44,20 @@ public class MovieService extends HttpServlet {
             // 从DataManager获取电影对象
             Movie movie = DataManager.getInstance().getMovieById(Integer.parseInt(movieId));
 
-            // 将电影对象转换为JSON格式并返回
+            // 如果电影对象不为空，则将其转换为 JSON 格式并返回
             if (null != movie) {
                 ObjectMapper mapper = new ObjectMapper();
                 String jsonMovie = mapper.writeValueAsString(movie);
                 response.getWriter().println(jsonMovie);
             } else {
+                // 如果电影不存在，返回空字符串
                 response.getWriter().println("");
             }
 
         } catch (Exception e) {
+            // 捕获并打印异常
             e.printStackTrace();
+            // 如果发生异常，返回空字符串
             response.getWriter().println("");
         }
     }
