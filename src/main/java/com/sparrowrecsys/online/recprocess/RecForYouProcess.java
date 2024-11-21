@@ -1,3 +1,4 @@
+#导入相应的包
 package com.sparrowrecsys.online.recprocess;
 
 import com.sparrowrecsys.online.datamanager.DataManager;
@@ -11,25 +12,19 @@ import org.json.JSONObject;
 
 import java.util.*;
 
+import static com.sparrowrecsys.online.util.HttpClient.asyncSinglePostRequest;
+
 /**
- * 处理推荐相似电影的推荐流程。
- * 这个类包含了从数据源获取用户和电影信息、计算相似度、
- * 调用外部服务以及生成推荐列表的逻辑。
- */
+ * 推荐相似电影的推荐流程
+ *
+
 public class RecForYouProcess {
 
-    /**
-     * 获取推荐电影列表。
-     * <p>
-     * 这个方法首先获取用户信息，然后从数据源中获取候选电影列表。
-     * 如果配置指定使用Redis作为嵌入向量的来源，它会从Redis中加载用户的嵌入向量。
-     * 同样，如果配置指定从Redis加载用户特征，它也会从Redis中加载这些特征。
-     * 最后，它使用传入的模型来对候选电影进行排序，并返回指定数量的推荐电影。
-     * </p>
-     *
+   /**
+     * 获取推荐电影列表
      * @param userId 输入的用户 ID
-     * @param size   推荐列表的大小
-     * @param model  用于计算相似度的模型（例如 "emb" 或 "nerualcf"）
+     * @param size 推荐列表的大小
+     * @param model 用于计算相似度的模型
      * @return 推荐的电影列表
      */
     public static List<Movie> getRecList(int userId, int size, String model){
@@ -38,25 +33,28 @@ public class RecForYouProcess {
             return new ArrayList<>();
         }
         final int CANDIDATE_SIZE = 800;
+       //通过 DataManager 根据评分获取前 800 部电影作为候选集。
         List<Movie> candidates = DataManager.getInstance().getMovies(CANDIDATE_SIZE, "rating");
 
-        // 如果数据源是 Redis，从 Redis 加载用户嵌入向量
+         // 如果数据源是 Redis，从 Redis 加载用户嵌入向量
         if (Config.EMB_DATA_SOURCE.equals(Config.DATA_SOURCE_REDIS)){
             String userEmbKey = "uEmb:" + userId;
             String userEmb = RedisClient.getInstance().get(userEmbKey);
+           //如果获取到数据，使用 Utility.parseEmbStr 将字符串解析为向量，并存储到用户对象中。
             if (null != userEmb){
                 user.setEmb(Utility.parseEmbStr(userEmb));
             }
         }
-        // 如果从 Redis 加载用户特征
+         // 如果从 Redis 加载用户特征
         if (Config.IS_LOAD_USER_FEATURE_FROM_REDIS){
             String userFeaturesKey = "uf:" + userId;
+           //通过 Redis 的 hgetAll 方法获取用户特征（以哈希结构存储）。
             Map<String, String> userFeatures = RedisClient.getInstance().hgetAll(userFeaturesKey);
             if (null != userFeatures){
                 user.setUserFeatures(userFeatures);
             }
         }
-
+       //依据 user 信息、候选电影 candidates 和指定的推荐模型 model 生成排序结果。
         List<Movie> rankedList = ranker(user, candidates, model);
 
         if (rankedList.size() > size){
@@ -66,28 +64,25 @@ public class RecForYouProcess {
     }
 
     /**
-     * 对候选集进行排序。
-     * <p>
-     * 这个方法根据传入的模型对候选电影列表进行排序。对于 "emb" 模型，它计算用户和每部候选电影之间的嵌入向量相似度；
-     * 对于 "nerualcf" 模型，它调用外部 TensorFlow Serving 服务来获取预测分数。
-     * 然后，它根据分数对候选电影进行排序，并返回排序后的列表。
-     * </p>
-     *
-     * @param user    输入用户
+     * 对候选集进行排序
+     * @param user 输入用户
      * @param candidates 候选电影列表
-     * @param model   用于排序的模型名称
+     * @param model 用于排序的模型名称
      * @return 排序后的电影列表
      */
     public static List<Movie> ranker(User user, List<Movie> candidates, String model){
+       //使用 HashMap 存储每个候选电影的分数。
         HashMap<Movie, Double> candidateScoreMap = new HashMap<>();
 
         switch (model){
+            //计算用户与候选电影的嵌入向量相似度
             case "emb":
                 for (Movie candidate : candidates){
                     double similarity = calculateEmbSimilarScore(user, candidate);
                     candidateScoreMap.put(candidate, similarity);
                 }
                 break;
+            //调用神经协同过滤服务 (callNeuralCFTFServing)，为每部电影生成分数。
             case "nerualcf":
                 callNeuralCFTFServing(user, candidates, candidateScoreMap);
                 break;
@@ -103,13 +98,8 @@ public class RecForYouProcess {
         return rankedList;
     }
 
-    /**
-     * 基于嵌入向量计算相似度得分。
-     * <p>
-     * 这个方法使用用户的嵌入向量和候选电影的嵌入向量来计算它们之间的余弦相似度。
-     * 如果用户或候选电影的嵌入向量为空，它返回 -1 表示无效的相似度得分。
-     * </p>
-     *
+   /**
+     * 基于嵌入向量计算相似度得分
      * @param user 输入用户
      * @param candidate 候选电影
      * @return 相似度得分
@@ -122,21 +112,18 @@ public class RecForYouProcess {
     }
 
     /**
-     * 调用 TensorFlow Serving 获取 NeuralCF 模型的推理结果。
-     * <p>
-     * 这个方法构建了一个包含用户 ID 和候选电影 ID 的请求体，并将其发送到 TensorFlow Serving 服务。
-     * 然后，它解析响应体中的预测分数，并将这些分数存储在传入的 candidateScoreMap 中。
-     * </p>
-     *
+     * 调用 TensorFlow Serving 获取 NeuralCF 模型的推理结果
      * @param user 输入用户
      * @param candidates 候选电影列表
      * @param candidateScoreMap 保存预测分数的映射
      */
     public static void callNeuralCFTFServing(User user, List<Movie> candidates, HashMap<Movie, Double> candidateScoreMap){
+       //检查输入是否合法、用户对象是否为空、候选电影列表是否为空或长度为零
         if (null == user || null == candidates || candidates.size() == 0){
             return;
         }
-
+       
+         //为每部候选电影创建 JSON 对象，将其 userId 和 movieId 添加到 instances 数组中
         JSONArray instances = new JSONArray();
         for (Movie m : candidates){
             JSONObject instance = new JSONObject();
